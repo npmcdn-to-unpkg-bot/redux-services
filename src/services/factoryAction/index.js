@@ -3,13 +3,14 @@ import { TAGS }             from './config'
 
 const tags = `${TAGS}`
 
-export const factoryActions = ({ dispatch, getState }) => {
+export const factoryAction = ({ dispatch, getState }) => {
   require('redux-journal').write(``, `${tags}.init`)
 
   let service = {
+    do: {},
     links: {
       journal: { from: 'redux-services/journal' },
-      factoryServices: { from: 'redux-services/factoryServices', },
+      factoryService: { from: 'redux-services/factoryService', },
     },
     reducer: require('./reducer').reducer
   }
@@ -20,8 +21,10 @@ export const factoryActions = ({ dispatch, getState }) => {
 
   const prepareFuncText = (s) => s.slice(s.indexOf('{') + 1, -1)
 
-  api.doActions = ({ serviceName }) => {
-    const serviceDoc = api('factoryServices').getByName({ name: serviceName })
+  api.generateActions = (payload) => {
+    write(`(payload = ${JSON.stringify(payload)})`, `api.generateActions`)
+    const { serviceName } = payload
+    const serviceDoc = api('factoryService').getByName({ name: serviceName })
     const docs = getState().docs.filter(doc => doc.serviceID == serviceDoc._id)
 
     let module = {
@@ -31,20 +34,27 @@ export const factoryActions = ({ dispatch, getState }) => {
         request: [],
         success: [],
         failure: [],
-        saga: {},
-      },
+        saga: [],
+      }
     }
 
     docs.map(doc => {
       const action = doc.name
       const type = action.toUpperCase()
+      const typeRequest = `${type}_REQUEST`
+      const typeSuccess = `${type}_SUCCESS`
+      const typeFailure = `${type}_FAILURE`
       module.actions.regular.push({ action, type })
-      if (doc.request) module.actions.request.push({ action: `${action}Request`, type: `${type}_REQUEST`})
-      if (doc.success) module.actions.success.push({ action: `${action}Success`, type: `${type}_SUCCESS` })
-      if (doc.failure) module.actions.failure.push({ action: `${action}Failure`, type: `${type}_FAILURE` })
-      if (doc.saga) {
-        module.actions.saga[action] = { type: doc.sagaType, request: doc.request, success: doc.success, failure: doc.failure }
-      }
+      if (doc.request) module.actions.request.push({ action: `${action}Request`, type: typeRequest })
+      if (doc.success) module.actions.success.push({ action: `${action}Success`, type: typeSuccess })
+      if (doc.failure) module.actions.failure.push({ action: `${action}Failure`, type: typeFailure })
+      if (doc.saga) module.actions.saga.push({
+        action,
+        insert: doc.sagaInsert,
+        sagaType: doc.sagaType,
+        type,
+        request: doc.request, success: doc.success, failure: doc.failure
+      })
       if (doc.api == true) {
         module.api.push({ name: action, code: doc.apiCode })
       }
@@ -53,17 +63,17 @@ export const factoryActions = ({ dispatch, getState }) => {
     return module
   }
 
-  api.insert = (payload) => {
+  service.do.insert = (payload) => {
     write(`(payload = ${JSON.stringify(payload)})`, `insert`)
     dispatch(actions.insert(payload))
   }
 
-  api.remove = (payload) => {
+  service.do.remove = (payload) => {
     write(`(payload = ${JSON.stringify(payload)})`, `remove`)
     dispatch(actions.remove(payload))
   }
 
-  api.update = (payload) => {
+  service.do.update = (payload) => {
     write(`(payload = ${JSON.stringify(payload)})`, `update`)
     dispatch(actions.update(payload))
   }

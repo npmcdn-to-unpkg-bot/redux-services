@@ -1,4 +1,6 @@
 import cuid                 from 'cuid'
+import { call, fork }       from 'redux-saga/effects'
+import { put, take }        from 'redux-saga/effects'
 
 const tags = `factory`
 
@@ -6,28 +8,32 @@ export const factory = ({ dispatch, getState }) => {
   require('redux-journal').write(``, `${tags}.init`)
   let service = { links: {
     journal:          { from: 'redux-services/journal', },
-    factoryActions:   { from: 'redux-services/factoryActions', },
-    factoryLinks:     { from: 'redux-services/factoryLinks', },
+    factoryAction:   { from: 'redux-services/factoryAction', },
+    factoryComponent: { from: 'redux-services/factoryComponents', },
+    factoryElement:   { from: 'redux-services/factoryElement', },
+    factoryLink:     { from: 'redux-services/factoryLink', },
+    factoryService:   { from: 'redux-services/factoryService', },
   }}
 
   let api = service.api = (name) => service.links[name].service.api
 
-  const warning = (payload, name) => api('journal').warning(payload, `${tags}.${name}`)
-  const write   = (payload, name) => api('journal').write(payload, `${tags}.${name}`)
+  const warning = service.warning = (payload, name) => api('journal').warning(payload, `${tags}.${name}`)
+  const write   = service.write   = (payload, name) => api('journal').write(payload, `${tags}.${name}`)
 
-  api.doActions = ({ moduleConfig, moduleActionsGen }) => {
+  api.processActions = ({ moduleConfig, moduleActionsGen }) => {
     const { PREFIX } = moduleConfig
 
     let module = {}
     let actions = module.actions = {}
     let types = module.types = {}
+    let sagas = module.sagas = []
 
     types.INSERT = `${PREFIX}/INSERT`
     types.REMOVE = `${PREFIX}/REMOVE`
     types.UPDATE = `${PREFIX}/UPDATE`
 
-    const actionID = (type) => (payload) => ({ type, payload: { ...payload, _id: payload._id ? payload._id : cuid() }})
-    const action = (type) => (payload) => ({ type, payload })
+    const actionID =  (type) => (payload) => ({ type, payload: { ...payload, _id: payload._id ? payload._id : cuid() }})
+    const action =    (type) => (payload) => ({ type, payload })
 
     actions.insert = actionID(types.INSERT)
     actions.remove = action(types.REMOVE)
@@ -35,27 +41,28 @@ export const factory = ({ dispatch, getState }) => {
 
     moduleActionsGen.actions.regular.map(doc => {
       types[doc.type] = `${PREFIX}/${doc.type}`
-      actions[doc.action] = action(doc.type)
+      actions[doc.action] = action(types[doc.type])
     })
 
     moduleActionsGen.actions.request.map(doc => {
       types[doc.type] = `${PREFIX}/${doc.type}`
-      actions[doc.action] = action(doc.type)
+      actions[doc.action] = action(types[doc.type])
     })
+
     moduleActionsGen.actions.success.map(doc => {
       types[doc.type] = `${PREFIX}/${doc.type}`
-      actions[doc.action] = action(doc.type)
+      actions[doc.action] = action(types[doc.type])
     })
 
     moduleActionsGen.actions.failure.map(doc => {
       types[doc.type] = `${PREFIX}/${doc.type}`
-      actions[doc.action] = action(doc.type)
+      actions[doc.action] = action(types[doc.type])
     })
 
     return module
   }
 
-  api.doConfig = ({ serviceName }) => {
+  api.generateConfig = ({ serviceName }) => {
     const SERVICE  = serviceName
     const PREFIX   = `@@${SERVICE}`
     const TAGS     = `${SERVICE}`
@@ -63,19 +70,30 @@ export const factory = ({ dispatch, getState }) => {
     return { SERVICE, PREFIX, TAGS }
   }
 
-  api.doIndex = ({ serviceName }) => {
-    const moduleConfig = api.doConfig({ serviceName })
+  api.doIndex = (payload) => {
+    write(`(payload = ${JSON.stringify(payload)})`, `api.doIndex`)
+    const { serviceName } = payload
 
-    const moduleActionsGen = api('factoryActions').doActions({ serviceName, moduleConfig })
-    const moduleActions = api.doActions({ moduleConfig, moduleActionsGen })
+    const apiService = api('factoryService')
+    const apiComponent = api('factoryComponent')
+
+    const serviceDoc = apiService.getByName({ name: serviceName })
+    if (!serviceDoc) this.warning(`Service not found ${serviceName}`, `api.doIndex`)
+
+    const moduleComponents = apiComponent.generateAll({ serviceDoc })
+
+    const moduleConfig = api.generateConfig({ serviceName })
+
+    const moduleActionsGen = api('factoryAction').generateActions({ serviceName, moduleConfig })
+    const moduleActions = api.processActions({ moduleConfig, moduleActionsGen })
 
     const moduleReducer = api.doReducer({ moduleActions, moduleActionsGen })
 
-    const { actions } = moduleActions
+    const { actions, types } = moduleActions
     const { TAGS } = moduleConfig
     const { reducer } = moduleReducer
 
-    const moduleLinks = api('factoryLinks').doLinks({ serviceName })
+    const moduleLinks = api('factoryLink').doLinks({ serviceName })
 
     let module = {}
 
@@ -85,62 +103,123 @@ export const factory = ({ dispatch, getState }) => {
       require('redux-journal').write(``, `${tags}.init`)
 
       let service = {
-        moduleActions,
-        moduleConfig,
+        components: moduleComponents,
+        dispatch,
+        do: {},
+        getState,
         links: {
           ...moduleLinks,
           journal: { from: 'redux-services/journal' }
         },
         reducer: reducer,
+        saga: {}
       }
 
-      let api = service.api = (name) => service.links[name].service.api
+      const warning = service.warning = (payload, name) => api('journal').warning(payload, `${tags}.${name}`)
+      const write   = service.write   = (payload, name) => api('journal').write(payload, `${tags}.${name}`)
 
-      const write = (payload, name) => api('journal').write(payload, `${tags}.${name}`)
-
-      api.insert = (payload) => {
-        write(`(${JSON.stringify(payload)})`, `insert`)
-        dispatch(actions.insert(payload))
+      let api = service.api = (name) => {
+        if (service.links[name]) return service.links[name].service.api
+        warning(`({ "name": "${name}" }) - Cannot find API`, 'api')
       }
 
-      api.remove = (payload) => {
-        write(`(${JSON.stringify(payload)})`, `remove`)
+      service.do.insert = payload => {
+        write(`(${JSON.stringify(payload)})`, 'do.insert')
+        return dispatch(actions.insert(payload))
+      }
+
+      service.do.remove = payload => {
+        write(`(${JSON.stringify(payload)})`, 'do.remove')
         dispatch(actions.remove(payload))
       }
 
-      api.update = (payload) => {
-        write(`(${JSON.stringify(payload)})`, `update`)
+      service.do.update = (payload) => {
+        write(`(${JSON.stringify(payload)})`, 'do.update')
         dispatch(actions.update(payload))
       }
 
       moduleActionsGen.api.map(doc => {
         try {
-          api[doc.name] = new Function('payload', doc.code).bind(service)
+          const func = new Function('payload', doc.code).bind(service)
+          api[doc.name] = (payload) => {
+            write(`(${JSON.stringify(payload)})`, `${doc.name}`)
+            try {
+              return func(payload)
+            } catch (e) {
+              warning(e, `${doc.name}`)
+            }
+          }
         } catch (e) {
           warning(`Cannot create api.${doc.name}`, 'doIndex')
         }
       })
 
+      moduleActionsGen.actions.regular.map(doc => {
+        service.do[doc.action] = payload => {
+          write(`(${JSON.stringify(payload)})`, `do.${doc.action}`)
+          dispatch(actions[doc.action](payload))
+        }
+      })
+
       moduleActionsGen.actions.request.map(doc => {
-        api[doc.action] = (payload) => {
-          write(`(${JSON.stringify(payload)})`, doc.action)
+        service.do[doc.action] = payload => {
+          write(`(${JSON.stringify(payload)})`, `do.${doc.action}`)
           dispatch(actions[doc.action](payload))
         }
       })
 
       moduleActionsGen.actions.success.map(doc => {
-        api[doc.action] = (payload) => {
-          write(`(${JSON.stringify(payload)})`, doc.action)
+        service.do[doc.action] = payload => {
+          write(`(${JSON.stringify(payload)})`, `do.${doc.action}`)
           dispatch(actions[doc.action](payload))
         }
       })
 
       moduleActionsGen.actions.failure.map(doc => {
-        api[doc.action] = (payload) => {
+        service.do[doc.action] = payload => {
           warning(`(${JSON.stringify(payload)})`, doc.action)
           dispatch(actions[doc.action](payload))
         }
       })
+
+      const doWatchSagaAction = (sagaDoc) => {
+        function *sagaAction(action) {
+          const { __ns__ } = action
+          try {
+            if (sagaDoc.request) yield call(service.do[`${sagaDoc.action}Request`])
+            const result = yield call(api[sagaDoc.action], action.payload)
+            if (sagaDoc.insert) yield call(service.do['insert'], result)
+            if (sagaDoc.success) yield call(service.do[`${sagaDoc.action}Success`])
+          } catch (error) {
+            if (sagaDoc.failure) {
+              yield call(service.do[`${sagaDoc.action}Failure`], { error })
+            } else {
+              console.log(error, error.stack || '')
+            }
+          }
+        }
+
+        function *watchSagaAction() {
+          while (true) {
+            const type = types[sagaDoc.sagaType || sagaDoc.type]
+            // console.log('factory/index.js watchSagaAction', type)
+            const action = yield take(type)
+            yield fork(sagaAction, action)
+          }
+        }
+
+        return watchSagaAction
+      }
+
+      function *sagaRoot() {
+        let index = moduleActionsGen.actions.saga.length
+        while (index--) {
+          const doc = moduleActionsGen.actions.saga[index]
+          yield fork(doWatchSagaAction(doc))
+        }
+      }
+
+      service.saga.root = sagaRoot
 
       return service
     }
@@ -154,7 +233,6 @@ export const factory = ({ dispatch, getState }) => {
     const { types } = moduleActions
 
     module.initial = {
-      config: {},
       docs: [],
       status: { value: '', error: '' }
     }

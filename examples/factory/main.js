@@ -8,23 +8,31 @@ daemonServices().config({
   logger:           { priority: 1,  from: 'redux-services/logger', },
   services:         { priority: 1,  from: 'redux-services/services', },
   factoryActions:   { priority: 10, from: 'redux-services/factoryActions', },
+  factoryComponent: { priority: 10, from: 'redux-services/factoryComponent', },
+  factoryElement:   { priority: 10, from: 'redux-services/factoryElement', },
   factoryLinks:     { priority: 10, from: 'redux-services/factoryLinks', },
-  factoryServices:  { priority: 10, from: 'redux-services/factoryServices', },
+  factoryService:   { priority: 10, from: 'redux-services/factoryService', },
   factory:          { priority: 20, from: 'redux-services/factory', },
 }).run().then((api) => {
   const services = api.get('services')
   const factory = api.get('factory')
   const factoryActions = api.get('factoryActions')
+  const factoryComponent = api.get('factoryComponent')
+  const factoryElement = api.get('factoryElement')
   const factoryLinks = api.get('factoryLinks')
-  const factoryServices = api.get('factoryServices')
+  const factoryService = api.get('factoryService')
 
   const service1 = { _id: cuid(), name: 'imgur' }
 
-  factoryServices.api.insert(service1)
+  factoryService.do.insert(service1)
 
   const link1 = { _id: cuid(), serviceID: service1._id, name: 'fetch', from: 'redux-services/fetch' }
 
-  factoryLinks.api.insert(link1)
+  factoryLinks.do.insert(link1)
+
+  const link2 = { _id: cuid(), serviceID: service1._id, name: 'config', from: 'redux-services/servicesConfig' }
+
+  factoryLinks.do.insert(link2)
 
   const prepareFuncText = (s) => s.slice(s.indexOf('{') + 1, -1)
 
@@ -32,6 +40,7 @@ daemonServices().config({
     name: 'upload',
 
     saga: true,
+    sagaInsert: true,
 
     request: true,
     success: true,
@@ -49,30 +58,49 @@ daemonServices().config({
         return response.json();
       }).then(function (json) {
         if (json.success && json.status == 200) {
-          return json['data']['link'];
+          return { imageURL: json['data']['link'] };
         } else {
           throw new Error(json.error);
         }
-      })`
+      })`,
   }
 
-  factoryActions.api.insert(action1)
+  factoryActions.do.insert(action1)
 
   const action2 = { _id: cuid(), serviceID: service1._id,
     name: 'removeDocsOverMax',
 
     saga: true,
-    sagaType: 'insert',
+    sagaType: 'INSERT',
 
-    // api: true,
-    // apiCode: prepareFuncText((payload => {
-    //   const docsMax = 2
-    //   const removeLength = getState().docs.length - docsMax
-    //   api('journal').write(`removeLength = ${removeLength}`, tags)
-    // }).toString())
+    api: true,
+    apiCode: `
+      var apiConfig = this.api('config')
+      var docsMax = apiConfig ? apiConfig.get({ name: 'imgur.docsMax' }) || 2 : 2
+      var index = this.getState().docs.length - docsMax
+      while (index-- > 0) {
+        var _id = this.getState().docs[0]._id
+        this.do.remove({ _id: _id })
+      }
+    `
   }
 
-  factoryActions.api.insert(action2)
+  factoryActions.do.insert(action2)
+
+  const component1 = { _id: cuid(), name: 'ImgurUploader', serviceID: service1._id, }
+
+  factoryComponent.do.insert(component1)
+
+  const element1 = { _id: cuid(), name: 'Root', tag: 'div', componentID: component1._id, }
+  factoryElement.do.insert(element1)
+
+  const element2 = { _id: cuid(), name: 'ImageContainer', tag: 'div', componentID: component1._id, parentID: element1._id, }
+  factoryElement.do.insert(element2)
+
+  const element3 = { _id: cuid(), name: 'Image', tag: 'img', componentID: component1._id, parentID: element2._id, }
+  factoryElement.do.insert(element3)
+
+
 
   // const resultConfig = require('babel-core').transform(factory.api.doConfig('imgur'), { presets: ["es2015"] })
   // const config = eval(resultConfig.code)
@@ -85,29 +113,25 @@ daemonServices().config({
   services.api.importAlias('redux-imgur/imgur', (...args) =>
     factory.api.doIndex({ serviceName: 'imgur' }).configService(...args))
 
-  services.api.config({
-    security: { priority: 0,  from: 'redux-services/security', },
-    journal:  { priority: 1,  from: 'redux-services/journal', },
-    logger:   { priority: 1,  from: 'redux-services/logger', },
-    fetch:    { priority: 5,  from: 'redux-services/fetch', },
-    imgur:    { priority: 10, from: 'redux-imgur/imgur', },
+  return services.api.config({
+    config:   { priority: 10,   from: 'redux-services/servicesConfig' },
+    security: { priority: 11,   from: 'redux-services/security', },
+    journal:  { priority: 12,   from: 'redux-services/journal', },
+    logger:   { priority: 13,   from: 'redux-services/logger', },
+    fetch:    { priority: 14,   from: 'redux-services/fetch', },
+    imgur:    { priority: 100,  from: 'redux-imgur/imgur', },
+    uiWeb:    { priority: 1000, from: 'redux-services/uiWeb', },
   }).run().then((api) => {
     const imgur = api.get('imgur')
-    console.log(`examples/factory/main.js`, imgur)
 
-    const fileToBase64 = (fileName) => new Buffer(require('fs').readFileSync(fileName)).toString('base64')
-
-    const clientID = 'adcf840e0bf408c'
-    const imageBase64 = fileToBase64('test.jpg')
-
-    imgur.api.upload({ clientID, imageBase64 }).then((result) => {
-      console.log(result)
-    })
-
-    // imgur.api.uploadRequest({ name: 'Wow' })
-    // imgur.api.uploadSuccess({ name: 'Bla' })
-    // imgur.api.uploadFailure({ error: 'fuck' })
-    // imgur.api.insert({ name: 'blaBla' })
+    console.log(imgur)
+    // const config = api.get('config')
+    // const uiWeb = api.get('uiWeb')
+    //
+    // config.api.set({ name: 'imgur.docsMax', value: 1 })
+    //
+    // uiWeb.api.set({ name: 'title', value: 'redux-service title' })
+    // uiWeb.api.run({ store: api.getStore() })
   })
 
 }).catch((e) => {

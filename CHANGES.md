@@ -1,7 +1,12 @@
-- [ADD] services.factory saga
-* [ADD] services.factoryActions
-* [ADD] services.factoryServices
-* [ADD] services.factory
+- [ADD] first service and component in browser
+* [ADD] designer
+* [ADD] factoryComponent
+* [ADD] imgur integrate servicesConfig
+* [ADD] servicesConfig
+* [ADD] factory saga
+* [ADD] factoryActions
+* [ADD] factoryServices
+* [ADD] factory
 
 * [ADD] [DEVDEP]
 

@@ -3,10 +3,11 @@ import { TAGS }             from './config'
 
 const tags = `${TAGS}`
 
-export const factoryServices = ({ dispatch, getState }) => {
+export const factoryService = ({ dispatch, getState }) => {
   require('redux-journal').write(``, `${tags}.init`)
 
   let service = {
+    do: {},
     links: {
       journal: { from: 'redux-services/journal' }
     },
@@ -21,21 +22,21 @@ export const factoryServices = ({ dispatch, getState }) => {
   api.getByName = ({ name }) => {
     const doc = getState().docs.find(doc => doc.name == name)
     if (doc) return doc
-    warning(`Cannot find serviceName == ${name}`, `getByName`)
+    warning(`Cannot find serviceName == ${name}`, `api.getByName`)
   }
 
-  api.insert = (payload) => {
-    write(`(payload = ${JSON.stringify(payload)})`, `insert`)
+  service.do.insert = (payload) => {
+    write(`(payload = ${JSON.stringify(payload)})`, `do.insert`)
     dispatch(actions.insert(payload))
   }
 
-  api.remove = (payload) => {
-    write(`(payload = ${JSON.stringify(payload)})`, `remove`)
+  service.do.remove = (payload) => {
+    write(`(payload = ${JSON.stringify(payload)})`, `do.remove`)
     dispatch(actions.remove(payload))
   }
 
-  api.update = (payload) => {
-    write(`(payload = ${JSON.stringify(payload)})`, `update`)
+  service.do.update = (payload) => {
+    write(`(payload = ${JSON.stringify(payload)})`, `do.update`)
     dispatch(actions.update(payload))
   }
 

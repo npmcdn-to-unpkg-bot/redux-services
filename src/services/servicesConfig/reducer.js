@@ -1,7 +1,6 @@
 import { types }            from './actions'
 
 const initial = {
-  config: {},
   docs: [],
   status: { value: '', error: '' }
 }

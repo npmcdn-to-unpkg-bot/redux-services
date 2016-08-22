@@ -7,7 +7,7 @@ import { select }         from '../select'
 const tags = `${TAGS}.api.local`
 
 
-export const configAPILocal = ({ dispatch, getState, services }) => {
+export const configAPILocal = ({ dispatch, getState }) => {
   const api = () => {}
 
   const diff = () => {

@@ -20,7 +20,7 @@ export const configDaemon = (
   if (!manager) {
     require('redux-journal').enable()
     manager = require('redux-manager').manager
-    manager.enableLogger(require('redux-node-logger')())
+    //manager.enableLogger(require('redux-node-logger')())
   }
   write(`({ daemonName = '${daemonName}' })`, `${tags}.configServiceLocal`)
   edges({ manager })

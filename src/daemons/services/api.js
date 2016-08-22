@@ -43,6 +43,8 @@ export const configAPI = (
     throw new Error(e)
   }
 
+  api.getStore = () => store
+
   api.switchLink = (sourceServiceName, linkName, destinationServiceName) => {
     write(`(${sourceServiceName}, ${linkName}, ${destinationServiceName})`, `${tags}.switchLink`)
     const sourceService = api.get(sourceServiceName)
@@ -66,7 +68,8 @@ export const configAPI = (
     try {
       const serviceName = serviceDoc.name
       const [moduleName, submoduleName] = serviceDoc.from.split('/')
-      const configService = require(moduleName)[submoduleName]
+      // TODO: WEBPACK FIX WITH DYNAMIC NAMES
+      const configService = require('redux-services')[submoduleName]
       if (configService) {
         const serviceInstance = configService({
           dispatch: createDispatch(serviceName),
@@ -91,6 +94,7 @@ export const configAPI = (
   api.run = (payload) => Promise.try(() => {
     write(`(payload = ${JSON.stringify(payload)})`, `${tags}.run`)
     serviceHash = {}
+
     const servicesSelector = select(state())
     const serviceInstanceList = servicesSelector.docs.sort((s1, s2) => s1.priority > s2.priority)
       .map(serviceDoc => {
@@ -102,7 +106,8 @@ export const configAPI = (
         } else {
           warning(`Service '${serviceDoc.name}' return nothing after init`)
         }
-      }).filter(service => service)
+      })
+      .filter(service => service)
 
     const createStoreWithMiddleware = applyMiddleware(
       ...serviceInstanceList.filter(serviceInstance => serviceInstance.middleware)

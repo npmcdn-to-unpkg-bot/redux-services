@@ -3,13 +3,14 @@ import { TAGS }             from './config'
 
 const tags = `${TAGS}`
 
-export const factoryLinks = ({ dispatch, getState }) => {
+export const factoryLink = ({ dispatch, getState }) => {
   require('redux-journal').write(``, `${tags}.init`)
 
   let service = {
+    do: {},
     links: {
       journal: { from: 'redux-services/journal' },
-      factoryServices: { from: 'redux-services/factoryServices', },
+      factoryService: { from: 'redux-service/factoryService', },
     },
     reducer: require('./reducer').reducer
   }
@@ -18,8 +19,10 @@ export const factoryLinks = ({ dispatch, getState }) => {
 
   const write = (payload, name) => api('journal').write(payload, `${tags}.${name}`)
 
-  api.doLinks = ({ serviceName}) => {
-    const serviceDoc = api('factoryServices').getByName({ name: serviceName })
+  api.doLinks = (payload) => {
+    write(`(payload = ${JSON.stringify(payload)})`, `api.doLinks`)
+    const { serviceName } = payload
+    const serviceDoc = api('factoryService').getByName({ name: serviceName })
     const docs = getState().docs.filter(doc => doc.serviceID == serviceDoc._id)
 
     let module = {}
@@ -29,18 +32,18 @@ export const factoryLinks = ({ dispatch, getState }) => {
     return module
   }
 
-  api.insert = (payload) => {
-    write(`(payload = ${JSON.stringify(payload)})`, `insert`)
+  service.do.insert = (payload) => {
+    write(`(payload = ${JSON.stringify(payload)})`, `do.insert`)
     dispatch(actions.insert(payload))
   }
 
-  api.remove = (payload) => {
-    write(`(payload = ${JSON.stringify(payload)})`, `remove`)
+  service.do.remove = (payload) => {
+    write(`(payload = ${JSON.stringify(payload)})`, `do.remove`)
     dispatch(actions.remove(payload))
   }
 
-  api.update = (payload) => {
-    write(`(payload = ${JSON.stringify(payload)})`, `update`)
+  service.do.update = (payload) => {
+    write(`(payload = ${JSON.stringify(payload)})`, `do.update`)
     dispatch(actions.update(payload))
   }
 

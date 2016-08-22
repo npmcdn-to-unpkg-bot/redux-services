@@ -1,13 +1,14 @@
-import chalk                            from 'chalk'
+import chalk                from 'chalk'
+import { types }            from './actions'
 
 export const middleware = (getState) => () => (next) => (action) => {
-  const result = next(action)
   const state = getState()
   if (!state.enabled) return result
-  if (action.__ns__ != 'journal') return result
-  const doc = state.docs[state.docs.length - 1]
+  if (action.__ns__ != 'journal') return next(action)
+  const doc = action.payload
   if (doc) {
-    const { timeDiff, type, text, tags } = doc
+    const { type } = action
+    const { timeDiff, text, tags } = doc
     let a = []
 
     if (timeDiff > 200) {
@@ -35,13 +36,13 @@ export const middleware = (getState) => () => (next) => (action) => {
     a.push(text)
     const result = a.join(' - ')
 
-    if (type == 'error') {
+    if (type == types.ERROR) {
       console.error(chalk.bgRed(result))
-    } else if (type == 'warning') {
+    } else if (type == types.WARNING) {
       console.warn(chalk.bgYellow(result))
     } else {
       console.log(chalk.bgWhite.black(result))
     }
   }
-  return result
+  //return next(action)
 }
